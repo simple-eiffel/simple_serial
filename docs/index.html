@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>simple_serial - Serial Port Communication for Eiffel</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="https://raw.githubusercontent.com/simple-eiffel/claude_eiffel_op_docs/main/artwork/LOGO.png" alt="simple_* logo" class="logo">
+        </div>
+        <h1>simple_serial</h1>
+        <p class="tagline">Cross-Platform Serial Port Communication for Eiffel</p>
+        <div class="badges">
+            <span class="badge badge-version">Phase 1</span>
+            <span class="badge badge-license">MIT</span>
+        </div>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#quick-start">Quick Start</a></li>
+            <li><a href="#classes">Classes</a></li>
+            <li><a href="#configuration">Configuration</a></li>
+            <li><a href="#api-reference">API Reference</a></li>
+            <li><a href="https://github.com/simple-eiffel/simple_serial">GitHub</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+                <strong>simple_serial</strong> provides serial port (COM port) communication for Eiffel
+                applications. It uses inline C externals for Win32 API calls following the Eric Bezault
+                pattern. Supports configurable baud rates, parity, stop bits, and flow control with a
+                fluent builder API.
+            </p>
+            <p>
+                Part of the <a href="https://github.com/simple-eiffel">Simple Eiffel</a> ecosystem.
+            </p>
+        </section>
+
+        <section id="quick-start">
+            <h2>Quick Start</h2>
+
+            <h3>Installation</h3>
+            <ol>
+                <li>Set the environment variable:
+<pre><code>SIMPLE_EIFFEL=D:\prod</code></pre>
+                </li>
+                <li>Add to your ECF file:
+<pre><code>&lt;library name="simple_serial" location="$SIMPLE_EIFFEL/simple_serial/simple_serial.ecf"/&gt;</code></pre>
+                </li>
+            </ol>
+
+            <h3>Basic Usage</h3>
+<pre><code><span class="keyword">local</span>
+    serial: <span class="type">SIMPLE_SERIAL</span>
+    port: <span class="keyword">detachable</span> <span class="type">SERIAL_PORT</span>
+<span class="keyword">do</span>
+    <span class="keyword">create</span> serial
+    port := serial.open_port (<span class="string">"COM3"</span>)
+
+    <span class="keyword">if</span> <span class="keyword">attached</span> port <span class="keyword">as</span> p <span class="keyword">then</span>
+        <span class="keyword">if</span> p.write_string (<span class="string">"Hello device!"</span>) <span class="keyword">then</span>
+            print (p.read_string (100))
+        <span class="keyword">end</span>
+        p.close
+    <span class="keyword">end</span>
+<span class="keyword">end</span></code></pre>
+        </section>
+
+        <section id="classes">
+            <h2>Classes</h2>
+            <table>
+                <tr>
+                    <th>Class</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>SIMPLE_SERIAL</code></td>
+                    <td>Main facade with factory methods for opening ports</td>
+                </tr>
+                <tr>
+                    <td><code>SERIAL_PORT</code></td>
+                    <td>Port handle for read/write operations</td>
+                </tr>
+                <tr>
+                    <td><code>SERIAL_PORT_CONFIG</code></td>
+                    <td>Configuration (baud rate, parity, stop bits, flow control)</td>
+                </tr>
+                <tr>
+                    <td><code>SERIAL_PORT_ENUMERATOR</code></td>
+                    <td>Discover available COM ports</td>
+                </tr>
+            </table>
+        </section>
+
+        <section id="configuration">
+            <h2>Configuration</h2>
+            <p>Use the fluent builder pattern to configure serial port settings:</p>
+
+<pre><code><span class="keyword">local</span>
+    config: <span class="type">SERIAL_PORT_CONFIG</span>
+<span class="keyword">do</span>
+    <span class="keyword">create</span> config.make_default
+    config := config
+        .set_baud_rate (115200)
+        .set_data_bits (8)
+        .set_parity ({<span class="type">SERIAL_PORT_CONFIG</span>}.parity_none)
+        .set_stop_bits ({<span class="type">SERIAL_PORT_CONFIG</span>}.stop_bits_one)
+        .set_flow_control ({<span class="type">SERIAL_PORT_CONFIG</span>}.flow_control_hardware)
+
+    port := serial.open_port_with_config (<span class="string">"COM3"</span>, config)
+<span class="keyword">end</span></code></pre>
+
+            <h3>Configuration Constants</h3>
+            <table>
+                <tr>
+                    <th>Category</th>
+                    <th>Constants</th>
+                </tr>
+                <tr>
+                    <td>Parity</td>
+                    <td><code>parity_none</code>, <code>parity_odd</code>, <code>parity_even</code>, <code>parity_mark</code>, <code>parity_space</code></td>
+                </tr>
+                <tr>
+                    <td>Stop Bits</td>
+                    <td><code>stop_bits_one</code>, <code>stop_bits_one_and_half</code>, <code>stop_bits_two</code></td>
+                </tr>
+                <tr>
+                    <td>Flow Control</td>
+                    <td><code>flow_control_none</code>, <code>flow_control_hardware</code>, <code>flow_control_software</code></td>
+                </tr>
+            </table>
+        </section>
+
+        <section id="api-reference">
+            <h2>API Reference</h2>
+
+            <div class="api-section">
+                <h3>SERIAL_PORT</h3>
+                <table>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>open: BOOLEAN</code></td>
+                        <td>Open with default config (9600-8-N-1)</td>
+                    </tr>
+                    <tr>
+                        <td><code>open_with_config (config): BOOLEAN</code></td>
+                        <td>Open with custom configuration</td>
+                    </tr>
+                    <tr>
+                        <td><code>close</code></td>
+                        <td>Close the port</td>
+                    </tr>
+                    <tr>
+                        <td><code>write_string (s): BOOLEAN</code></td>
+                        <td>Write string, returns success</td>
+                    </tr>
+                    <tr>
+                        <td><code>write_bytes (bytes): BOOLEAN</code></td>
+                        <td>Write raw bytes, returns success</td>
+                    </tr>
+                    <tr>
+                        <td><code>read_string (max): STRING_8</code></td>
+                        <td>Read up to max characters</td>
+                    </tr>
+                    <tr>
+                        <td><code>read_bytes (max): ARRAY [NATURAL_8]</code></td>
+                        <td>Read up to max bytes</td>
+                    </tr>
+                    <tr>
+                        <td><code>read_line: STRING_8</code></td>
+                        <td>Read until newline or timeout</td>
+                    </tr>
+                    <tr>
+                        <td><code>is_open: BOOLEAN</code></td>
+                        <td>Is port currently open?</td>
+                    </tr>
+                    <tr>
+                        <td><code>last_error: detachable STRING_32</code></td>
+                        <td>Last error message</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="api-section">
+                <h3>Port Discovery</h3>
+<pre><code><span class="comment">-- List all available ports</span>
+<span class="keyword">across</span> serial.available_ports <span class="keyword">as</span> p <span class="keyword">loop</span>
+    print (p + <span class="string">"%N"</span>)
+<span class="keyword">end</span>
+
+<span class="comment">-- Find Bluetooth devices (paired via OS)</span>
+<span class="keyword">across</span> serial.bluetooth_ports <span class="keyword">as</span> p <span class="keyword">loop</span>
+    print (<span class="string">"Bluetooth: "</span> + p + <span class="string">"%N"</span>)
+<span class="keyword">end</span>
+
+<span class="comment">-- Find USB serial adapters</span>
+<span class="keyword">across</span> serial.usb_ports <span class="keyword">as</span> p <span class="keyword">loop</span>
+    print (<span class="string">"USB: "</span> + p + <span class="string">"%N"</span>)
+<span class="keyword">end</span></code></pre>
+            </div>
+        </section>
+
+        <section id="features">
+            <h2>Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Cross-Platform API</h4>
+                    <p>Windows implementation complete, Linux/macOS planned.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Fluent Configuration</h4>
+                    <p>Chain configuration calls for clean, readable code.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Port Enumeration</h4>
+                    <p>Discover available COM ports, filter by Bluetooth/USB.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Design by Contract</h4>
+                    <p>Full preconditions, postconditions, and invariants.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Part of the <a href="https://simple-eiffel.github.io">Simple Eiffel</a> ecosystem.</p>
+        <p class="copyright">MIT License</p>
+    </footer>
+</body>
+</html>
