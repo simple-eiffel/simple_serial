@@ -20,7 +20,7 @@
 		<root class="TEST_APP" feature="make"/>
 		<setting name="console_application" value="true"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="simple_testing" location="$SIMPLE_TESTING\simple_testing.ecf"/>
+		<library name="simple_testing" location="$SIMPLE_EIFFEL\simple_testing\simple_testing.ecf"/>
 		<cluster name="serial_tests" location=".\testing\" recursive="true"/>
 	</target>
 </system>
