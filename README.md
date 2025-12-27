@@ -20,7 +20,7 @@ Part of the [Simple Eiffel](https://github.com/simple-eiffel) ecosystem.
 
 ## Overview
 
-SIMPLE_SERIAL provides serial port (COM port) communication for Eiffel applications. It uses inline C externals for Win32 API calls (CreateFile, SetCommState, ReadFile, WriteFile) following the Eric Bezault pattern. Supports configurable baud rates, parity, stop bits, and flow control with a fluent builder API.
+SIMPLE_SERIAL provides serial port (COM port) communication for Eiffel applications. It uses inline C externals for Win32 API calls (CreateFile, SetCommState, ReadFile, WriteFile) using inline C externals. Supports configurable baud rates, parity, stop bits, and flow control with a fluent builder API.
 
 ## Quick Start
 
