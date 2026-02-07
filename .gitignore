@@ -1,3 +1,6 @@
 EIFGENs/
 *.exe
 exception_trace.log
+*.melted
+*.epr
+*.log
