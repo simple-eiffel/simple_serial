@@ -3,7 +3,8 @@ note
 		Cross-platform serial port communication.
 
 		Provides read/write access to serial ports (COM ports on Windows,
-		/dev/tty* on Linux/macOS). Uses inline C for platform-specific APIs.
+		/dev/tty* on Linux and /dev/cu.* on macOS). SERIAL_PORT_PRIMITIVES holds
+		the platform calls, one class per platform.
 
 		Usage:
 			port: SERIAL_PORT
@@ -23,6 +24,9 @@ note
 
 class
 	SERIAL_PORT
+
+inherit
+	SERIAL_PORT_PRIMITIVES
 
 create
 	make
@@ -88,30 +92,25 @@ feature -- Connection
 			config := a_config
 			last_error := Void
 
-			if {PLATFORM}.is_windows then
-				create l_port_c.make (windows_port_path)
-				handle := c_open_port_windows (l_port_c.item)
-				if handle /= Invalid_handle then
-					if c_configure_port_windows (handle, config.baud_rate, config.data_bits,
-						config.stop_bits, config.parity, config.flow_control) then
-						if c_set_timeouts_windows (handle, config.read_timeout_ms, config.write_timeout_ms) then
-							Result := True
-						else
-							last_error := "Failed to set timeouts"
-							c_close_port_windows (handle)
-							handle := Invalid_handle
-						end
+			create l_port_c.make (platform_port_path (port_name))
+			handle := c_open_port (l_port_c.item)
+			if handle /= Invalid_handle then
+				if c_configure_port (handle, config.baud_rate, config.data_bits,
+					config.stop_bits, config.parity, config.flow_control) then
+					if c_set_timeouts (handle, config.read_timeout_ms, config.write_timeout_ms) then
+						Result := True
 					else
-						last_error := "Failed to configure port"
-						c_close_port_windows (handle)
+						last_error := "Failed to set timeouts"
+						c_close_port (handle)
 						handle := Invalid_handle
 					end
 				else
-					last_error := "Failed to open port: " + port_name
+					last_error := "Failed to configure port"
+					c_close_port (handle)
+					handle := Invalid_handle
 				end
 			else
-				-- Linux/macOS implementation would go here
-				last_error := "Platform not yet supported"
+				last_error := "Failed to open port: " + port_name
 			end
 		ensure
 			config_updated: config = a_config
@@ -122,9 +121,7 @@ feature -- Connection
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_close_port_windows (handle)
-			end
+			c_close_port (handle)
 			handle := Invalid_handle
 			last_error := Void
 		ensure
@@ -146,12 +143,10 @@ feature -- Read Operations
 			last_read_count := 0
 			last_error := Void
 
-			if {PLATFORM}.is_windows then
-				last_read_count := c_read_port_windows (handle, l_buffer.item, a_max_count)
-				if last_read_count < 0 then
-					last_error := "Read failed"
-					last_read_count := 0
-				end
+			last_read_count := c_read_port (handle, l_buffer.item, a_max_count)
+			if last_read_count < 0 then
+				last_error := "Read failed"
+				last_read_count := 0
 			end
 
 			create Result.make_filled (0, 1, last_read_count.max (0))
@@ -226,14 +221,12 @@ feature -- Write Operations
 			last_write_count := 0
 			last_error := Void
 
-			if {PLATFORM}.is_windows then
-				last_write_count := c_write_port_windows (handle, l_buffer.item, a_bytes.count)
-				if last_write_count < 0 then
-					last_error := "Write failed"
-					last_write_count := 0
-				else
-					Result := last_write_count = a_bytes.count
-				end
+			last_write_count := c_write_port (handle, l_buffer.item, a_bytes.count)
+			if last_write_count < 0 then
+				last_error := "Write failed"
+				last_write_count := 0
+			else
+				Result := last_write_count = a_bytes.count
 			end
 		ensure
 			valid_count: last_write_count >= 0
@@ -277,11 +270,9 @@ feature -- Status
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				Result := c_bytes_available_windows (handle)
-				if Result < 0 then
-					Result := 0
-				end
+			Result := c_bytes_available (handle)
+			if Result < 0 then
+				Result := 0
 			end
 		ensure
 			non_negative: Result >= 0
@@ -302,9 +293,7 @@ feature -- Flow Control
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_set_dtr_windows (handle, a_state)
-			end
+			c_set_dtr (handle, a_state)
 		end
 
 	set_rts (a_state: BOOLEAN)
@@ -312,9 +301,7 @@ feature -- Flow Control
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_set_rts_windows (handle, a_state)
-			end
+			c_set_rts (handle, a_state)
 		end
 
 	flush
@@ -322,9 +309,7 @@ feature -- Flow Control
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_flush_windows (handle)
-			end
+			c_flush (handle)
 		end
 
 	purge_input
@@ -332,9 +317,7 @@ feature -- Flow Control
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_purge_input_windows (handle)
-			end
+			c_purge_input (handle)
 		end
 
 	purge_output
@@ -342,15 +325,13 @@ feature -- Flow Control
 		require
 			is_open: is_open
 		do
-			if {PLATFORM}.is_windows then
-				c_purge_output_windows (handle)
-			end
+			c_purge_output (handle)
 		end
 
 feature {NONE} -- Implementation
 
 	handle: POINTER
-			-- Platform-specific handle (HANDLE on Windows, fd on Unix).
+			-- Platform-specific handle (HANDLE on Windows, descriptor elsewhere).
 
 	Invalid_handle: POINTER
 			-- Invalid handle value.
@@ -358,195 +339,6 @@ feature {NONE} -- Implementation
 			Result := c_invalid_handle
 		end
 
-	windows_port_path: STRING_32
-			-- Convert port name to Windows path format.
-		do
-			create Result.make (20)
-			if port_name.count > 4 and then port_name.substring (1, 4).is_case_insensitive_equal ("COM") then
-				-- COM10 and above need \\.\COM prefix
-				Result.append ("\\.\")
-			end
-			Result.append (port_name)
-		end
-
-feature {NONE} -- Windows C externals
-
-	c_invalid_handle: POINTER
-			-- Return INVALID_HANDLE_VALUE.
-		external
-			"C inline use <windows.h>"
-		alias
-			"return INVALID_HANDLE_VALUE;"
-		end
-
-	c_open_port_windows (a_port: POINTER): POINTER
-			-- Open serial port, return handle or INVALID_HANDLE_VALUE.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				return CreateFileA(
-					(LPCSTR)$a_port,
-					GENERIC_READ | GENERIC_WRITE,
-					0,
-					NULL,
-					OPEN_EXISTING,
-					0,
-					NULL
-				);
-			]"
-		end
-
-	c_close_port_windows (a_handle: POINTER)
-			-- Close the port handle.
-		external
-			"C inline use <windows.h>"
-		alias
-			"CloseHandle((HANDLE)$a_handle);"
-		end
-
-	c_configure_port_windows (a_handle: POINTER; a_baud, a_data_bits, a_stop_bits, a_parity, a_flow: INTEGER): BOOLEAN
-			-- Configure serial port settings.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				DCB dcb;
-				memset(&dcb, 0, sizeof(dcb));
-				dcb.DCBlength = sizeof(dcb);
-
-				if (!GetCommState((HANDLE)$a_handle, &dcb)) {
-					return EIF_FALSE;
-				}
-
-				dcb.BaudRate = (DWORD)$a_baud;
-				dcb.ByteSize = (BYTE)$a_data_bits;
-				dcb.StopBits = (BYTE)$a_stop_bits;
-				dcb.Parity = (BYTE)$a_parity;
-
-				// Flow control
-				if ($a_flow == 1) {
-					// Hardware flow control
-					dcb.fOutxCtsFlow = TRUE;
-					dcb.fRtsControl = RTS_CONTROL_HANDSHAKE;
-				} else if ($a_flow == 2) {
-					// Software flow control
-					dcb.fInX = TRUE;
-					dcb.fOutX = TRUE;
-					dcb.XonChar = 0x11;
-					dcb.XoffChar = 0x13;
-				} else {
-					dcb.fOutxCtsFlow = FALSE;
-					dcb.fRtsControl = RTS_CONTROL_DISABLE;
-					dcb.fInX = FALSE;
-					dcb.fOutX = FALSE;
-				}
-
-				dcb.fBinary = TRUE;
-				dcb.fDtrControl = DTR_CONTROL_ENABLE;
-
-				return SetCommState((HANDLE)$a_handle, &dcb) ? EIF_TRUE : EIF_FALSE;
-			]"
-		end
-
-	c_set_timeouts_windows (a_handle: POINTER; a_read_ms, a_write_ms: INTEGER): BOOLEAN
-			-- Set read/write timeouts.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				COMMTIMEOUTS timeouts;
-				timeouts.ReadIntervalTimeout = 50;
-				timeouts.ReadTotalTimeoutMultiplier = 10;
-				timeouts.ReadTotalTimeoutConstant = (DWORD)$a_read_ms;
-				timeouts.WriteTotalTimeoutMultiplier = 10;
-				timeouts.WriteTotalTimeoutConstant = (DWORD)$a_write_ms;
-				return SetCommTimeouts((HANDLE)$a_handle, &timeouts) ? EIF_TRUE : EIF_FALSE;
-			]"
-		end
-
-	c_read_port_windows (a_handle, a_buffer: POINTER; a_max_count: INTEGER): INTEGER
-			-- Read from port, return bytes read or -1 on error.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				DWORD bytes_read = 0;
-				if (ReadFile((HANDLE)$a_handle, $a_buffer, (DWORD)$a_max_count, &bytes_read, NULL)) {
-					return (EIF_INTEGER)bytes_read;
-				}
-				return -1;
-			]"
-		end
-
-	c_write_port_windows (a_handle, a_buffer: POINTER; a_count: INTEGER): INTEGER
-			-- Write to port, return bytes written or -1 on error.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				DWORD bytes_written = 0;
-				if (WriteFile((HANDLE)$a_handle, $a_buffer, (DWORD)$a_count, &bytes_written, NULL)) {
-					return (EIF_INTEGER)bytes_written;
-				}
-				return -1;
-			]"
-		end
-
-	c_bytes_available_windows (a_handle: POINTER): INTEGER
-			-- Return number of bytes available to read.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				COMSTAT stat;
-				DWORD errors;
-				if (ClearCommError((HANDLE)$a_handle, &errors, &stat)) {
-					return (EIF_INTEGER)stat.cbInQue;
-				}
-				return -1;
-			]"
-		end
-
-	c_set_dtr_windows (a_handle: POINTER; a_state: BOOLEAN)
-			-- Set DTR line state.
-		external
-			"C inline use <windows.h>"
-		alias
-			"EscapeCommFunction((HANDLE)$a_handle, $a_state ? SETDTR : CLRDTR);"
-		end
-
-	c_set_rts_windows (a_handle: POINTER; a_state: BOOLEAN)
-			-- Set RTS line state.
-		external
-			"C inline use <windows.h>"
-		alias
-			"EscapeCommFunction((HANDLE)$a_handle, $a_state ? SETRTS : CLRRTS);"
-		end
-
-	c_flush_windows (a_handle: POINTER)
-			-- Flush output buffer.
-		external
-			"C inline use <windows.h>"
-		alias
-			"FlushFileBuffers((HANDLE)$a_handle);"
-		end
-
-	c_purge_input_windows (a_handle: POINTER)
-			-- Purge input buffer.
-		external
-			"C inline use <windows.h>"
-		alias
-			"PurgeComm((HANDLE)$a_handle, PURGE_RXCLEAR);"
-		end
-
-	c_purge_output_windows (a_handle: POINTER)
-			-- Purge output buffer.
-		external
-			"C inline use <windows.h>"
-		alias
-			"PurgeComm((HANDLE)$a_handle, PURGE_TXCLEAR);"
-		end
 
 invariant
 	name_not_empty: not port_name.is_empty

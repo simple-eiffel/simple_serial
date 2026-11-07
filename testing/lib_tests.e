@@ -87,4 +87,68 @@ feature -- Port Tests
 			assert_void ("no_error", port.last_error)
 		end
 
+feature -- Test: a real line
+
+	test_round_trip_over_pty
+			-- Bytes both ways through a pseudo-terminal pair, which stands in for a
+			-- serial line. Off Windows only: Windows has no such pair.
+		local
+			l_master, l_count: INTEGER
+			l_name: C_STRING
+			l_port, l_second: SERIAL_PORT
+			l_buffer: MANAGED_POINTER
+			l_line: C_STRING
+		do
+			if not {PLATFORM}.is_windows then
+				l_master := c_open_master
+				assert_true ("pair opened", l_master >= 0)
+				create l_name.make_by_pointer (c_slave_name (l_master))
+				create l_port.make (l_name.string)
+				assert_true ("port opened", l_port.open)
+				create l_second.make (l_name.string)
+				assert_false ("second open refused", l_second.open)
+				assert_attached ("reason given", l_second.last_error)
+
+				assert_true ("wrote", l_port.write_string ("hello"))
+				create l_buffer.make (64)
+				l_count := c_master_read (l_master, l_buffer.item, 64, 2000)
+				assert_integers_equal ("line carried five bytes", 5, l_count)
+				assert_integers_equal ("first byte", 0x68, l_buffer.read_natural_8 (0).to_integer_32)
+
+				create l_line.make ("world%N")
+				assert_integers_equal ("sent", 6, c_master_write (l_master, l_line.item, 6))
+				assert_true ("read the line", l_port.read_line.same_string ("world"))
+				l_port.close
+				assert_false ("closed", l_port.is_open)
+				c_master_close (l_master)
+			end
+		end
+
+feature {NONE} -- Pseudo-terminal externals
+
+	c_open_master: INTEGER
+		external "C inline use %"serial_test_support.h%""
+		alias "return sts_open_master ();"
+		end
+
+	c_slave_name (a_fd: INTEGER): POINTER
+		external "C inline use %"serial_test_support.h%""
+		alias "return (EIF_POINTER) sts_slave_name ((int) $a_fd);"
+		end
+
+	c_master_write (a_fd: INTEGER; a_data: POINTER; a_count: INTEGER): INTEGER
+		external "C inline use %"serial_test_support.h%""
+		alias "return sts_write ((int) $a_fd, (const char *) $a_data, (int) $a_count);"
+		end
+
+	c_master_read (a_fd: INTEGER; a_buffer: POINTER; a_max, a_timeout_ms: INTEGER): INTEGER
+		external "C blocking inline use %"serial_test_support.h%""
+		alias "return sts_read ((int) $a_fd, (char *) $a_buffer, (int) $a_max, (int) $a_timeout_ms);"
+		end
+
+	c_master_close (a_fd: INTEGER)
+		external "C inline use %"serial_test_support.h%""
+		alias "sts_close ((int) $a_fd);"
+		end
+
 end

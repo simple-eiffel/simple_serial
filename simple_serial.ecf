@@ -14,7 +14,18 @@
 		</capability>
 		<library name="base" location="$ISE_LIBRARY\library\base\base.ecf"/>
 		<library name="time" location="$ISE_LIBRARY\library\time\time.ecf"/>
+		<external_include location="$(SIMPLE_EIFFEL)/simple_serial/Clib"/>
 		<cluster name="src" location=".\src\" recursive="true"/>
+		<cluster name="platform_windows" location=".\platform\windows">
+			<condition>
+				<platform value="windows"/>
+			</condition>
+		</cluster>
+		<cluster name="platform_posix" location=".\platform\posix">
+			<condition>
+				<platform excluded_value="windows"/>
+			</condition>
+		</cluster>
 	</target>
 	<target name="simple_serial_tests" extends="simple_serial">
 		<root class="TEST_APP" feature="make"/>
