@@ -20,6 +20,9 @@ note
 class
 	SERIAL_PORT_ENUMERATOR
 
+inherit
+	SERIAL_PORT_PRIMITIVES
+
 create
 	make
 
@@ -131,7 +134,7 @@ feature {NONE} -- Windows Implementation
 			from i := 1 until i > 256 loop
 				l_port_name := "COM" + i.out
 				create l_path.make ("\\.\COM" + i.out)
-				if c_port_exists_windows (l_path.item) then
+				if c_port_exists (l_path.item) then
 					available_ports.extend (l_port_name)
 					port_descriptions.force ("Serial Port", l_port_name)
 				end
@@ -139,37 +142,46 @@ feature {NONE} -- Windows Implementation
 			end
 		end
 
-	c_port_exists_windows (a_port: POINTER): BOOLEAN
-			-- Check if COM port exists by trying to open it.
-		external
-			"C inline use <windows.h>"
-		alias
-			"[
-				HANDLE h = CreateFileA(
-					(LPCSTR)$a_port,
-					GENERIC_READ | GENERIC_WRITE,
-					0,
-					NULL,
-					OPEN_EXISTING,
-					0,
-					NULL
-				);
-				if (h != INVALID_HANDLE_VALUE) {
-					CloseHandle(h);
-					return EIF_TRUE;
-				}
-				// ERROR_ACCESS_DENIED means port exists but is in use
-				return (GetLastError() == ERROR_ACCESS_DENIED) ? EIF_TRUE : EIF_FALSE;
-			]"
-		end
-
 feature {NONE} -- Unix Implementation
 
 	scan_unix_ports
-			-- Scan for serial ports on Linux/macOS.
+			-- Scan /dev: cu.* on macOS, and USB, ACM and rfcomm devices on Linux.
+		local
+			l_folder: DIRECTORY
+			l_name: STRING_32
 		do
-			-- Would scan /dev/tty* and /dev/cu.* (macOS)
-			-- For now, empty implementation
+			create l_folder.make ("/dev")
+			if l_folder.exists and then l_folder.is_readable then
+				across l_folder.entries as ic loop
+					l_name := ic.name
+					if is_serial_device (l_name) then
+						available_ports.extend ({STRING_32} "/dev/" + l_name)
+						port_descriptions.force (device_description (l_name), {STRING_32} "/dev/" + l_name)
+					end
+				end
+			end
+		end
+
+	is_serial_device (a_name: READABLE_STRING_32): BOOLEAN
+			-- Does `a_name' in /dev look like a serial port?
+		do
+			Result := a_name.starts_with ({STRING_32} "cu.") or a_name.starts_with ({STRING_32} "ttyUSB")
+				or a_name.starts_with ({STRING_32} "ttyACM") or a_name.starts_with ({STRING_32} "rfcomm")
+		end
+
+	device_description (a_name: READABLE_STRING_32): STRING_32
+			-- What `a_name' suggests the device is.
+		local
+			l_lower: STRING_32
+		do
+			l_lower := a_name.as_lower
+			if l_lower.has_substring ({STRING_32} "bluetooth") or l_lower.has_substring ({STRING_32} "rfcomm") then
+				Result := {STRING_32} "Bluetooth Serial Port"
+			elseif l_lower.has_substring ({STRING_32} "usb") or l_lower.has_substring ({STRING_32} "acm") then
+				Result := {STRING_32} "USB Serial Port"
+			else
+				Result := {STRING_32} "Serial Port"
+			end
 		end
 
 end

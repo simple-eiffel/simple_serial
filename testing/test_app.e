@@ -44,6 +44,7 @@ feature -- Test Runners
 			run_test (agent tests.test_enumerator_creation, "test_enumerator_creation")
 			run_test (agent tests.test_facade_creation, "test_facade_creation")
 			run_test (agent tests.test_port_creation, "test_port_creation")
+			run_test (agent tests.test_round_trip_over_pty, "test_round_trip_over_pty")
 		end
 
 feature {NONE} -- Implementation
