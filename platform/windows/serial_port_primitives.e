@@ -202,27 +202,112 @@ feature {NONE} -- Windows C externals
 			"PurgeComm((HANDLE)$a_handle, PURGE_TXCLEAR);"
 		end
 
-	c_port_exists (a_port: POINTER): BOOLEAN
-			-- Check if COM port exists by trying to open it.
+	c_port_listing (a_buffer: POINTER; a_capacity: INTEGER): INTEGER
+			-- Write the COM ports into `a_buffer' as zero-terminated UTF-16 of at
+			-- most `a_capacity' units, one port per line: name, description and
+			-- hardware id separated by tabs. First the Ports device class from
+			-- SetupAPI (friendly name, else device description; first hardware
+			-- id), then every port in the SERIALCOMM device map with empty
+			-- description and hardware id (the caller keeps the first record of
+			-- each name). Opens no port. Returns the units the whole listing
+			-- needs, terminator included; a larger value than `a_capacity' means
+			-- the listing was cut short.
 		external
-			"C inline use <windows.h>"
+			"C inline use <windows.h>, <setupapi.h>"
 		alias
 			"[
-				HANDLE h = CreateFileA(
-					(LPCSTR)$a_port,
-					GENERIC_READ | GENERIC_WRITE,
-					0,
-					NULL,
-					OPEN_EXISTING,
-					0,
-					NULL
-				);
-				if (h != INVALID_HANDLE_VALUE) {
-					CloseHandle(h);
-					return EIF_TRUE;
+				static const GUID l_ports_class = {0x4D36E978, 0xE325, 0x11CE, {0xBF, 0xC1, 0x08, 0x00, 0x2B, 0xE1, 0x03, 0x18}};
+				WCHAR *l_out = (WCHAR *) $a_buffer;
+				int l_capacity = (int) $a_capacity;
+				int l_used = 0;
+				int l_phase = 0;
+				int l_has_record, l_field;
+				DWORD l_index = 0;
+				DWORD l_size, l_value_size, l_type;
+				HDEVINFO l_set;
+				SP_DEVINFO_DATA l_info;
+				HKEY l_key;
+				HKEY l_map = NULL;
+				WCHAR l_name [256];
+				WCHAR l_description [512];
+				WCHAR l_hardware_id [512];
+				WCHAR l_value [256];
+				const WCHAR *l_fields [3];
+				const WCHAR *l_char;
+
+				l_set = SetupDiGetClassDevsW (&l_ports_class, NULL, NULL, DIGCF_PRESENT);
+				if (RegOpenKeyExW (HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &l_map) != ERROR_SUCCESS) {
+					l_map = NULL;
 				}
-				// ERROR_ACCESS_DENIED means port exists but is in use
-				return (GetLastError() == ERROR_ACCESS_DENIED) ? EIF_TRUE : EIF_FALSE;
+				l_info.cbSize = sizeof (l_info);
+				while (l_phase < 2) {
+					l_has_record = 0;
+					memset (l_name, 0, sizeof (l_name));
+					memset (l_description, 0, sizeof (l_description));
+					memset (l_hardware_id, 0, sizeof (l_hardware_id));
+					if (l_phase == 0) {
+						if (l_set != INVALID_HANDLE_VALUE && SetupDiEnumDeviceInfo (l_set, l_index, &l_info)) {
+							l_key = SetupDiOpenDevRegKey (l_set, &l_info, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ);
+							if (l_key != INVALID_HANDLE_VALUE) {
+								l_size = sizeof (l_name) - sizeof (WCHAR);
+								if (RegQueryValueExW (l_key, L"PortName", NULL, &l_type, (LPBYTE) l_name, &l_size) != ERROR_SUCCESS || l_type != REG_SZ) {
+									memset (l_name, 0, sizeof (l_name));
+								}
+								RegCloseKey (l_key);
+							}
+							if (!SetupDiGetDeviceRegistryPropertyW (l_set, &l_info, SPDRP_FRIENDLYNAME, NULL, (PBYTE) l_description, sizeof (l_description) - sizeof (WCHAR), NULL)) {
+								memset (l_description, 0, sizeof (l_description));
+								if (!SetupDiGetDeviceRegistryPropertyW (l_set, &l_info, SPDRP_DEVICEDESC, NULL, (PBYTE) l_description, sizeof (l_description) - sizeof (WCHAR), NULL)) {
+									memset (l_description, 0, sizeof (l_description));
+								}
+							}
+							if (!SetupDiGetDeviceRegistryPropertyW (l_set, &l_info, SPDRP_HARDWAREID, NULL, (PBYTE) l_hardware_id, sizeof (l_hardware_id) - 2 * sizeof (WCHAR), NULL)) {
+								memset (l_hardware_id, 0, sizeof (l_hardware_id));
+							}
+							l_has_record = _wcsnicmp (l_name, L"COM", 3) == 0;
+							l_index++;
+						} else {
+							l_phase = 1;
+							l_index = 0;
+						}
+					} else {
+						l_value_size = sizeof (l_value) / sizeof (WCHAR);
+						l_size = sizeof (l_name) - sizeof (WCHAR);
+						if (l_map != NULL && RegEnumValueW (l_map, l_index, l_value, &l_value_size, NULL, &l_type, (LPBYTE) l_name, &l_size) == ERROR_SUCCESS) {
+							l_has_record = l_type == REG_SZ && l_name [0] != 0;
+							l_index++;
+						} else {
+							l_phase = 2;
+						}
+					}
+					if (l_has_record) {
+						l_fields [0] = l_name;
+						l_fields [1] = l_description;
+						l_fields [2] = l_hardware_id;
+						for (l_field = 0; l_field < 3; l_field++) {
+							for (l_char = l_fields [l_field]; *l_char != 0; l_char++) {
+								if (l_used + 1 < l_capacity) {
+									l_out [l_used] = (*l_char == L'\t' || *l_char == L'\n' || *l_char == L'\r') ? L' ' : *l_char;
+								}
+								l_used++;
+							}
+							if (l_used + 1 < l_capacity) {
+								l_out [l_used] = (l_field < 2) ? L'\t' : L'\n';
+							}
+							l_used++;
+						}
+					}
+				}
+				if (l_set != INVALID_HANDLE_VALUE) {
+					SetupDiDestroyDeviceInfoList (l_set);
+				}
+				if (l_map != NULL) {
+					RegCloseKey (l_map);
+				}
+				if (l_capacity > 0) {
+					l_out [(l_used < l_capacity) ? l_used : l_capacity - 1] = 0;
+				}
+				return (EIF_INTEGER) (l_used + 1);
 			]"
 		end
 

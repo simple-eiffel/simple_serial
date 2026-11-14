@@ -143,10 +143,10 @@ feature {NONE} -- POSIX operations
 			"tcflush (ssp_fd ((void *) $a_handle), TCOFLUSH);"
 		end
 
-	c_port_exists (a_port: POINTER): BOOLEAN
-			-- Only the Windows scan asks this.
+	c_port_listing (a_buffer: POINTER; a_capacity: INTEGER): INTEGER
+			-- Only the Windows scan asks this; POSIX scans /dev instead.
 		do
-			Result := False
+			Result := 0
 		end
 
 end

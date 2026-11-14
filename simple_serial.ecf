@@ -15,6 +15,11 @@
 		<library name="base" location="$ISE_LIBRARY\library\base\base.ecf"/>
 		<library name="time" location="$ISE_LIBRARY\library\time\time.ecf"/>
 		<external_include location="$(SIMPLE_EIFFEL)/simple_serial/Clib"/>
+		<external_library location="setupapi.lib">
+			<condition>
+				<platform value="windows"/>
+			</condition>
+		</external_library>
 		<cluster name="src" location=".\src\" recursive="true"/>
 		<cluster name="platform_windows" location=".\platform\windows">
 			<condition>
