@@ -110,7 +110,7 @@ feature -- Connection
 					handle := Invalid_handle
 				end
 			else
-				last_error := "Failed to open port: " + port_name
+				last_error := {STRING_32} "Failed to open port: " + port_name
 			end
 		ensure
 			config_updated: config = a_config
