@@ -50,7 +50,8 @@
             <h3>Installation</h3>
             <ol>
                 <li>Set the environment variable:
-<pre><code>SIMPLE_EIFFEL=D:\prod</code></pre>
+<pre><code>Windows:          set SIMPLE_EIFFEL=D:\prod
+macOS and Linux:  export SIMPLE_EIFFEL=$HOME/simple_eiffel</code></pre>
                 </li>
                 <li>Add to your ECF file:
 <pre><code>&lt;library name="simple_serial" location="$SIMPLE_EIFFEL/simple_serial/simple_serial.ecf"/&gt;</code></pre>
@@ -232,6 +233,17 @@
                 </div>
             </div>
         </section>
+
+        <section id="platforms">
+            <h2>Platforms</h2>
+            <p>Tested on Windows, Linux and macOS (see the README's badges).</p>
+            <ul>
+                <li>EiffelStudio 25.02+</li>
+                <li>Windows 10+, macOS or Linux (Linux users need access to the port, usually the <code>dialout</code> group). 1.5 stop bits and mark/space parity work only on Windows. Linux takes standard baud rates only.</li>
+                <li>Off Windows, one test does a real round trip over a pseudo-terminal.</li>
+            </ul>
+        </section>
+
     </main>
 
     <footer>
